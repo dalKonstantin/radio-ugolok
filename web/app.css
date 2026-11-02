@@ -1,0 +1,91 @@
+/* M1: минимальная вёрстка. Полное оформление — в M4. */
+:root {
+  --orange:     #FF5500;
+  --orange-hover: #FF7700;
+  --bg:         #F2F2F2;
+  --surface:    #FFFFFF;
+  --border:     #E5E5E5;
+  --text:       #333333;
+  --text-muted: #999999;
+  --radius:     3px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 var(--font);
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 46px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.logo b { color: var(--orange); }
+#listeners { color: var(--text-muted); font-size: 12px; }
+
+main {
+  max-width: 640px;
+  margin: 48px auto;
+  padding: 24px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.artist { color: var(--text-muted); font-size: 12px; }
+.title { font-size: 24px; margin: 2px 0 8px; }
+.time { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  margin-top: 24px;
+}
+button {
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--orange);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+button:hover { background: var(--orange-hover); }
+button.on { background: #333; }
+input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+#diag {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+#diag summary { cursor: pointer; }
+#diag dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0 12px;
+  margin: 4px 0 0;
+}
+#diag dt, #diag dd { margin: 0; }
+#diag dd { text-align: right; color: var(--text); }

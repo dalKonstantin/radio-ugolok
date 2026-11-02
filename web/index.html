@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Radio Ugolok</title>
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <header>
+    <span class="logo">Radio <b>Ugolok</b></span>
+    <span id="listeners">0 слушателей</span>
+  </header>
+
+  <main>
+    <div id="artist" class="artist"></div>
+    <div id="title" class="title">Подключение…</div>
+    <div id="time" class="time">–:–– / –:––</div>
+
+    <div class="controls">
+      <button id="connect" type="button">Подключиться к эфиру</button>
+      <label>Ник <input id="nick" maxlength="32" autocomplete="off"></label>
+    </div>
+  </main>
+
+  <audio id="audio"></audio>
+
+  <details id="diag" open>
+    <summary>диагностика</summary>
+    <dl>
+      <dt>ws</dt><dd id="d-socket">—</dd>
+      <dt>offset</dt><dd id="d-offset">—</dd>
+      <dt>rtt</dt><dd id="d-rtt">—</dd>
+      <dt>drift</dt><dd id="d-drift">—</dd>
+      <dt>rate</dt><dd id="d-rate">—</dd>
+    </dl>
+  </details>
+</body>
+</html>
