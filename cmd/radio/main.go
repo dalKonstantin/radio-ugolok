@@ -11,23 +11,27 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
 	"radio-ugolok/internal/clock"
 	"radio-ugolok/internal/httpapi"
 	"radio-ugolok/internal/hub"
+	"radio-ugolok/internal/library"
 	"radio-ugolok/internal/media"
 	"radio-ugolok/internal/station"
 	"radio-ugolok/web"
 )
 
+// uploadJobs — сколько загрузок перекодируется одновременно.
+const uploadJobs = 2
+
 type config struct {
-	addr    string
-	dataDir string
-	bitrate int
-	track   string
+	addr        string
+	dataDir     string
+	maxUploadMB int
+	bitrate     int
+	track       string
 }
 
 func main() {
@@ -40,12 +44,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	tracksDir := filepath.Join(cfg.dataDir, "tracks")
-	if err := os.MkdirAll(tracksDir, 0o755); err != nil {
-		log.Fatalf("radio: %v", err)
+	lib, err := library.Open(library.Options{
+		DataDir:     cfg.dataDir,
+		BitrateKbps: cfg.bitrate,
+		MaxJobs:     uploadJobs,
+	})
+	if err != nil {
+		log.Fatalf("radio: библиотека: %v", err)
 	}
+	defer lib.Close()
+	cleanTmp(lib.TmpDir())
 
-	track, err := prepareTrack(ctx, cfg, tracksDir)
+	track, err := initialTrack(ctx, cfg, lib)
 	if err != nil {
 		log.Fatalf("radio: подготовка трека: %v", err)
 	}
@@ -58,9 +68,10 @@ func main() {
 
 	api := &httpapi.Server{
 		Station:   st,
+		Library:   lib,
 		WS:        h.ServeWS,
 		Web:       web.FS,
-		TracksDir: tracksDir,
+		MaxUpload: int64(cfg.maxUploadMB) << 20,
 	}
 	srv := &http.Server{
 		Addr:              cfg.addr,
@@ -85,63 +96,40 @@ func main() {
 	log.Print("radio: остановлен")
 }
 
-// prepareTrack готовит единственный трек M1: перекодирует файл из -track
-// в эфирный формат или, если флаг не задан, генерирует метроном.
-func prepareTrack(ctx context.Context, cfg config, tracksDir string) (station.Track, error) {
-	var (
-		id    string
-		title string
-		dst   string
-	)
+// initialTrack — трек, который крутится в эфире до появления очереди (M3):
+// файл из -track или сгенерированный метроном, через обычный конвейер загрузки.
+func initialTrack(ctx context.Context, cfg config, lib *library.Library) (library.Track, error) {
 	if cfg.track != "" {
-		hash, err := media.HashFile(cfg.track)
-		if err != nil {
-			return station.Track{}, err
-		}
-		id = hash
-		title = strings.TrimSuffix(filepath.Base(cfg.track), filepath.Ext(cfg.track))
-		dst = filepath.Join(tracksDir, id+".mp3")
-		if _, err := os.Stat(dst); err != nil {
-			tmp := dst + ".tmp"
-			if err := media.Transcode(ctx, cfg.track, tmp, cfg.bitrate); err != nil {
-				os.Remove(tmp)
-				return station.Track{}, err
-			}
-			if err := os.Rename(tmp, dst); err != nil {
-				return station.Track{}, err
-			}
-		}
-	} else {
-		tmp := filepath.Join(tracksDir, "m1-metronome.tmp")
-		if err := media.GenerateTestTrack(ctx, tmp, 180, cfg.bitrate); err != nil {
-			os.Remove(tmp)
-			return station.Track{}, err
-		}
-		hash, err := media.HashFile(tmp)
-		if err != nil {
-			return station.Track{}, err
-		}
-		id = hash
-		title = "Метроном M1"
-		dst = filepath.Join(tracksDir, id+".mp3")
-		if err := os.Rename(tmp, dst); err != nil {
-			return station.Track{}, err
-		}
+		t, _, err := lib.Import(ctx, cfg.track, filepath.Base(cfg.track), "")
+		return t, err
 	}
+	src := filepath.Join(lib.TmpDir(), "metronome.wav")
+	defer os.Remove(src)
+	if err := media.GenerateTestTrack(ctx, src, 180); err != nil {
+		return library.Track{}, err
+	}
+	t, _, err := lib.Import(ctx, src, "Метроном.wav", "")
+	return t, err
+}
 
-	dur, err := media.DurationMs(ctx, dst)
+// cleanTmp убирает временные файлы, оставшиеся от прерванных загрузок.
+func cleanTmp(dir string) {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return station.Track{}, err
+		return
 	}
-	return station.Track{ID: id, Title: title, Artist: "Radio Ugolok", DurationMs: dur}, nil
+	for _, e := range entries {
+		os.Remove(filepath.Join(dir, e.Name()))
+	}
 }
 
 func parseFlags() config {
 	var cfg config
 	flag.StringVar(&cfg.addr, "addr", envStr("RADIO_ADDR", ":8080"), "адрес прослушивания")
 	flag.StringVar(&cfg.dataDir, "data", envStr("RADIO_DATA", "./data"), "корень хранилища")
+	flag.IntVar(&cfg.maxUploadMB, "max-upload", envInt("RADIO_MAX_UPLOAD", 150), "лимит загрузки, МБ")
 	flag.IntVar(&cfg.bitrate, "bitrate", envInt("RADIO_BITRATE", 192), "битрейт эфирного mp3, kbps")
-	flag.StringVar(&cfg.track, "track", envStr("RADIO_TRACK", ""), "M1: аудиофайл для эфира (по умолчанию генерируется метроном)")
+	flag.StringVar(&cfg.track, "track", envStr("RADIO_TRACK", ""), "до M3: аудиофайл для эфира (по умолчанию генерируется метроном)")
 	flag.Parse()
 	return cfg
 }

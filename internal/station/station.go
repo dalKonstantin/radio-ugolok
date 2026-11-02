@@ -2,7 +2,7 @@
 // Всё состояние живёт в одной горутине (Run); снаружи туда попадают только
 // команды через канал, наружу уходят готовые сообщения для рассылки.
 //
-// M1: в эфире один захардкоженный трек, который крутится по кругу.
+// До M3: в эфире один заданный при старте трек, который крутится по кругу.
 package station
 
 import (
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"radio-ugolok/internal/clock"
+	"radio-ugolok/internal/library"
 )
 
 // tailMargin — запас после конца трека, чтобы клиенты успели доиграть хвост.
@@ -28,13 +29,7 @@ type Outgoing struct {
 	Msg Message
 }
 
-type Track struct {
-	ID         string `json:"id"`
-	Title      string `json:"title"`
-	Artist     string `json:"artist"`
-	DurationMs int64  `json:"durationMs"`
-	HasCover   bool   `json:"hasCover"`
-}
+type Track = library.Track
 
 type NowPlaying struct {
 	Track     *Track `json:"track"`
@@ -131,6 +126,13 @@ func (s *Station) Leave(ctx context.Context, clientID string) error {
 func (s *Station) Resync(ctx context.Context, clientID string) error {
 	return s.do(ctx, func() {
 		s.out <- Outgoing{To: clientID, Msg: Message{Type: "state", Data: s.state()}}
+	})
+}
+
+// TrackAdded рассылает всем новый трек библиотеки.
+func (s *Station) TrackAdded(ctx context.Context, t Track) error {
+	return s.do(ctx, func() {
+		s.out <- Outgoing{Msg: Message{Type: "trackAdded", Data: map[string]Track{"track": t}}}
 	})
 }
 

@@ -11,7 +11,12 @@
   <header>
     <span class="logo">Radio <b>Ugolok</b></span>
     <span id="listeners">0 слушателей</span>
+    <label class="button">
+      Загрузить трек
+      <input id="file" type="file" accept="audio/*,.flac,.opus,.m4a,.wma,.aiff" multiple hidden>
+    </label>
   </header>
+  <div id="upload-status" class="upload-status"></div>
 
   <main>
     <div id="artist" class="artist"></div>
@@ -23,6 +28,12 @@
       <label>Ник <input id="nick" maxlength="32" autocomplete="off"></label>
     </div>
   </main>
+
+  <section class="panel">
+    <h2>Библиотека <span id="library-total" class="muted"></span></h2>
+    <input id="search" type="search" placeholder="Поиск по названию и исполнителю" autocomplete="off">
+    <ul id="library" class="library"></ul>
+  </section>
 
   <audio id="audio"></audio>
 

@@ -44,3 +44,50 @@ function plural(n, one, few, many) {
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
   return many;
 }
+
+export function renderUploadStatus(text) {
+  $('upload-status').textContent = text;
+}
+
+export function renderLibrary(items, total) {
+  const list = $('library');
+  list.replaceChildren(...items.map(libraryRow));
+  $('library-total').textContent = items.length < total
+    ? `показано ${items.length} из ${total}`
+    : `${total} ${plural(total, 'трек', 'трека', 'треков')}`;
+}
+
+function libraryRow(t) {
+  const li = document.createElement('li');
+
+  const cover = document.createElement(t.hasCover ? 'img' : 'span');
+  cover.className = 'cover';
+  if (t.hasCover) {
+    cover.src = `/api/tracks/${t.id}/cover`;
+    cover.alt = '';
+    cover.loading = 'lazy';
+  }
+
+  const text = document.createElement('span');
+  text.className = 'track';
+  const title = document.createElement('b');
+  title.textContent = t.title;
+  const artist = document.createElement('span');
+  artist.className = 'muted';
+  artist.textContent = t.artist;
+  text.append(title, ' ', artist);
+
+  const dur = document.createElement('span');
+  dur.className = 'muted';
+  dur.textContent = fmtTime(t.durationMs / 1000);
+
+  // До M3 трек нельзя поставить в эфир — даём послушать файл напрямую.
+  const link = document.createElement('a');
+  link.href = `/api/tracks/${t.id}/audio`;
+  link.target = '_blank';
+  link.rel = 'noopener';
+  link.textContent = 'файл';
+
+  li.append(cover, text, dur, link);
+  return li;
+}

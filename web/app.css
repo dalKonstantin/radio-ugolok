@@ -1,4 +1,4 @@
-/* M1: минимальная вёрстка. Полное оформление — в M4. */
+/* Минимальная вёрстка. Полное оформление — в M4. */
 :root {
   --orange:     #FF5500;
   --orange-hover: #FF7700;
@@ -89,3 +89,58 @@ input {
 }
 #diag dt, #diag dd { margin: 0; }
 #diag dd { text-align: right; color: var(--text); }
+
+.muted { color: var(--text-muted); }
+
+header .button {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  background: var(--orange);
+  color: #fff;
+  cursor: pointer;
+}
+header .button:hover { background: var(--orange-hover); }
+.upload-status {
+  max-width: 640px;
+  margin: 8px auto 0;
+  padding: 0 16px;
+  min-height: 1.4em;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.panel {
+  max-width: 640px;
+  margin: 0 auto 48px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.panel h2 { margin: 0 0 12px; font-size: 16px; }
+.panel h2 .muted { font-size: 12px; font-weight: normal; }
+#search { width: 100%; margin-bottom: 8px; }
+
+.library { list-style: none; margin: 0; padding: 0; }
+.library li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+}
+.library .cover {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  background: var(--border);
+}
+.library .track {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.library a { color: var(--orange); font-size: 12px; }
