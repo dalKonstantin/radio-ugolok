@@ -31,7 +31,8 @@ type config struct {
 	dataDir     string
 	maxUploadMB int
 	bitrate     int
-	track       string
+	queueLimit  int
+	ephemeral   bool
 }
 
 func main() {
@@ -55,15 +56,12 @@ func main() {
 	defer lib.Close()
 	cleanTmp(lib.TmpDir())
 
-	track, err := initialTrack(ctx, cfg, lib)
-	if err != nil {
-		log.Fatalf("radio: подготовка трека: %v", err)
-	}
-	log.Printf("radio: в эфире %q (%s, %d мс)", track.Title, track.ID[:12], track.DurationMs)
-
 	clk := clock.New()
 	out := make(chan station.Outgoing, 256)
-	st := station.New(clk, track, out)
+	st := station.New(clk, lib, out, station.Options{
+		QueueLimit: cfg.queueLimit,
+		Ephemeral:  cfg.ephemeral,
+	})
 	h := hub.New(clk, st, out)
 
 	api := &httpapi.Server{
@@ -96,22 +94,6 @@ func main() {
 	log.Print("radio: остановлен")
 }
 
-// initialTrack — трек, который крутится в эфире до появления очереди (M3):
-// файл из -track или сгенерированный метроном, через обычный конвейер загрузки.
-func initialTrack(ctx context.Context, cfg config, lib *library.Library) (library.Track, error) {
-	if cfg.track != "" {
-		t, _, err := lib.Import(ctx, cfg.track, filepath.Base(cfg.track), "")
-		return t, err
-	}
-	src := filepath.Join(lib.TmpDir(), "metronome.wav")
-	defer os.Remove(src)
-	if err := media.GenerateTestTrack(ctx, src, 180); err != nil {
-		return library.Track{}, err
-	}
-	t, _, err := lib.Import(ctx, src, "Метроном.wav", "")
-	return t, err
-}
-
 // cleanTmp убирает временные файлы, оставшиеся от прерванных загрузок.
 func cleanTmp(dir string) {
 	entries, err := os.ReadDir(dir)
@@ -129,7 +111,8 @@ func parseFlags() config {
 	flag.StringVar(&cfg.dataDir, "data", envStr("RADIO_DATA", "./data"), "корень хранилища")
 	flag.IntVar(&cfg.maxUploadMB, "max-upload", envInt("RADIO_MAX_UPLOAD", 150), "лимит загрузки, МБ")
 	flag.IntVar(&cfg.bitrate, "bitrate", envInt("RADIO_BITRATE", 192), "битрейт эфирного mp3, kbps")
-	flag.StringVar(&cfg.track, "track", envStr("RADIO_TRACK", ""), "до M3: аудиофайл для эфира (по умолчанию генерируется метроном)")
+	flag.IntVar(&cfg.queueLimit, "queue-limit", envInt("RADIO_QUEUE_LIMIT", 3), "позиций в очереди на одного человека")
+	flag.BoolVar(&cfg.ephemeral, "ephemeral", envBool("RADIO_EPHEMERAL", false), "удалять трек через 5 секунд после проигрывания")
 	flag.Parse()
 	return cfg
 }
@@ -152,4 +135,17 @@ func envInt(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+func envBool(key string, def bool) bool {
+	v, ok := os.LookupEnv(key)
+	if !ok {
+		return def
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "radio: %s=%q не bool, беру %v\n", key, v, def)
+		return def
+	}
+	return b
 }

@@ -11,6 +11,7 @@ const RESYNC_MIN_GAP_MS = 2000;
 const DIAG_EVERY_MS = 250;
 const SEARCH_DEBOUNCE_MS = 200;
 const LIBRARY_PAGE = 100;
+const CHAT_MAX = 500;
 
 const loadNick = () => {
   try {
@@ -45,6 +46,26 @@ const requestResync = () => {
 const audio = document.getElementById('audio');
 const player = new Player(audio, clock, { onStale: requestResync });
 
+// Состояние эфира, как его видит клиент.
+let nowPlaying = null;
+let skip = { votes: 0, required: 1 };
+let voted = false; // свой голос сервер не возвращает — помним сами
+
+const playingId = () => nowPlaying?.track?.id ?? null;
+const renderSkip = () => ui.renderSkip(skip, voted, !!nowPlaying?.track);
+
+function applyNowPlaying(np) {
+  if (np.itemId !== nowPlaying?.itemId) voted = false;
+  nowPlaying = np;
+  ui.renderNowPlaying(np);
+  renderSkip();
+  player.setNowPlaying(np);
+  // played_at у треков поменялся, а у играющего крестик неактивен.
+  loadLibrary();
+}
+
+const removeFromQueue = (itemId) => socket.send('dequeue', { itemId });
+
 socket.on('hello', async () => {
   // Первая оценка сдвига готова после трёх обменов, остальные её уточнят.
   await clock.run();
@@ -53,21 +74,38 @@ socket.on('hello', async () => {
 socket.on('close', () => clock.cancel());
 socket.on('pong', (d) => clock.onPong(d));
 socket.on('state', (s) => {
-  ui.renderNowPlaying(s.nowPlaying);
+  applyNowPlaying(s.nowPlaying);
+  ui.renderQueue(s.queue, removeFromQueue);
   ui.renderListeners(s.listeners);
-  player.setNowPlaying(s.nowPlaying);
+  skip = s.skip;
+  voted = false; // после переподключения мы для сервера новый клиент
+  renderSkip();
+  ui.resetChat(s.chat);
 });
-socket.on('nowPlaying', (np) => {
-  ui.renderNowPlaying(np);
-  player.setNowPlaying(np);
-});
+socket.on('nowPlaying', applyNowPlaying);
+socket.on('queue', (q) => ui.renderQueue(q.items, removeFromQueue));
 socket.on('listeners', (l) => ui.renderListeners(l));
-socket.on('error', (e) => console.warn('сервер:', e.code, e.message));
+socket.on('skip', (s) => {
+  skip = s;
+  if (s.votes === 0) voted = false;
+  renderSkip();
+});
+socket.on('chat', (m) => ui.appendChat(m));
 socket.on('trackAdded', () => loadLibrary());
+socket.on('trackRemoved', () => loadLibrary());
+socket.on('error', (e) => ui.toast(e.message));
 
-// Библиотека: поиск уходит на сервер с задержкой, устаревшие ответы
+// --- библиотека: поиск уходит на сервер с задержкой, устаревшие ответы
 // отбрасываются.
 const searchInput = document.getElementById('search');
+const libraryActions = {
+  enqueue: (trackId) => socket.send('enqueue', { trackId }),
+  remove: (t) => {
+    if (confirm(`Удалить «${t.title}» из библиотеки? Файл будет стёрт.`)) {
+      socket.send('deleteTrack', { trackId: t.id });
+    }
+  },
+};
 let libraryReq = 0;
 async function loadLibrary() {
   const req = ++libraryReq;
@@ -77,7 +115,7 @@ async function loadLibrary() {
     const body = await res.json();
     if (req !== libraryReq) return;
     if (!res.ok) throw new Error(body?.error?.message ?? res.status);
-    ui.renderLibrary(body.items, body.total);
+    ui.renderLibrary(body.items, body.total, playingId(), libraryActions);
   } catch (err) {
     console.warn('библиотека:', err);
   }
@@ -88,7 +126,7 @@ searchInput.addEventListener('input', () => {
   searchTimer = setTimeout(loadLibrary, SEARCH_DEBOUNCE_MS);
 });
 
-// Загрузка.
+// --- загрузка
 const fileInput = document.getElementById('file');
 fileInput.addEventListener('change', async () => {
   const files = [...fileInput.files];
@@ -105,15 +143,35 @@ fileInput.addEventListener('change', async () => {
         ? `Загружено: ${result.track.artist} — ${result.track.title}`
         : `Уже в библиотеке: ${result.track.artist} — ${result.track.title}`);
     } else {
-      ui.renderUploadStatus(`${file.name}: ${result.message}`);
+      ui.renderUploadStatus('');
+      ui.toast(`${file.name}: ${result.message}`);
     }
   });
-  loadLibrary();
 });
 
-setInterval(() => {
-  if (socket.status === 'open' && clock.ready) clock.run();
-}, RESYNC_EVERY_MS);
+// --- чат
+const chatInput = document.getElementById('chat-input');
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter' || e.isComposing) return;
+  e.preventDefault();
+  const text = chatInput.value.trim().slice(0, CHAT_MAX);
+  if (!text) return;
+  if (socket.send('chat', { text })) chatInput.value = '';
+  else ui.toast('Нет соединения с сервером');
+});
+const chatList = document.getElementById('chat');
+chatList.addEventListener('scroll', () => {
+  if (chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 4) ui.scrollChat(false);
+});
+document.getElementById('chat-new').addEventListener('click', () => ui.scrollChat(true));
+
+// --- управление
+document.getElementById('skip').addEventListener('click', () => {
+  if (socket.send('voteSkip')) {
+    voted = !voted;
+    renderSkip();
+  }
+});
 
 document.getElementById('connect').addEventListener('click', () => {
   if (player.connected) {
@@ -126,7 +184,11 @@ document.getElementById('connect').addEventListener('click', () => {
 });
 
 setInterval(() => {
-  ui.renderProgress(player.targetPos(), player.np?.track?.durationMs);
+  if (socket.status === 'open' && clock.ready) clock.run();
+}, RESYNC_EVERY_MS);
+
+setInterval(() => {
+  ui.renderProgress(player.targetPos(), nowPlaying?.track?.durationMs);
   ui.renderDiag({
     socket: socket.status,
     offset: clock.ready ? clock.offset : null,

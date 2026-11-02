@@ -184,6 +184,32 @@ func (h *Hub) handle(ctx context.Context, conn *websocket.Conn, c *client, msg i
 		return h.station.Join(ctx, c.id, cleanNick(d.Nick))
 	case "resync":
 		return h.station.Resync(ctx, c.id)
+	case "enqueue":
+		var d struct {
+			TrackID string `json:"trackId"`
+		}
+		_ = json.Unmarshal(msg.Data, &d)
+		return h.station.Enqueue(ctx, c.id, d.TrackID)
+	case "dequeue":
+		var d struct {
+			ItemID string `json:"itemId"`
+		}
+		_ = json.Unmarshal(msg.Data, &d)
+		return h.station.Dequeue(ctx, c.id, d.ItemID)
+	case "voteSkip":
+		return h.station.VoteSkip(ctx, c.id)
+	case "chat":
+		var d struct {
+			Text string `json:"text"`
+		}
+		_ = json.Unmarshal(msg.Data, &d)
+		return h.station.Chat(ctx, c.id, d.Text)
+	case "deleteTrack":
+		var d struct {
+			TrackID string `json:"trackId"`
+		}
+		_ = json.Unmarshal(msg.Data, &d)
+		return h.station.DeleteTrack(ctx, c.id, d.TrackID)
 	default:
 		h.sendError(ctx, conn, "unknown_command", "Неизвестная команда: "+msg.Type)
 		return nil
@@ -249,5 +275,6 @@ func newID() string {
 func isNormalClose(err error) bool {
 	s := websocket.CloseStatus(err)
 	return s == websocket.StatusNormalClosure || s == websocket.StatusGoingAway ||
+		s == websocket.StatusNoStatusRcvd ||
 		errors.Is(err, context.Canceled) || errors.Is(err, io.EOF)
 }

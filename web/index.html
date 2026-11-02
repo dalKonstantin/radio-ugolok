@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/app.css">
   <script type="module" src="/js/app.js"></script>
 </head>
-<body>
+<body class="idle">
   <header>
     <span class="logo">Radio <b>Ugolok</b></span>
     <span id="listeners">0 слушателей</span>
@@ -18,24 +18,44 @@
   </header>
   <div id="upload-status" class="upload-status"></div>
 
-  <main>
-    <div id="artist" class="artist"></div>
-    <div id="title" class="title">Подключение…</div>
-    <div id="time" class="time">–:–– / –:––</div>
+  <div class="layout">
+    <main class="panel player">
+      <div id="artist" class="artist"></div>
+      <div id="title" class="title">Подключение…</div>
+      <div class="meta"><span id="time"></span> <span id="added-by"></span></div>
 
-    <div class="controls">
-      <button id="connect" type="button">Подключиться к эфиру</button>
-      <label>Ник <input id="nick" maxlength="32" autocomplete="off"></label>
-    </div>
-  </main>
+      <div class="controls">
+        <button id="connect" type="button">Подключиться к эфиру</button>
+        <button id="skip" type="button" class="secondary" disabled>Скип</button>
+        <label>Ник <input id="nick" maxlength="32" autocomplete="off"></label>
+      </div>
+    </main>
 
-  <section class="panel">
-    <h2>Библиотека <span id="library-total" class="muted"></span></h2>
-    <input id="search" type="search" placeholder="Поиск по названию и исполнителю" autocomplete="off">
-    <ul id="library" class="library"></ul>
-  </section>
+    <section class="panel">
+      <h2>Очередь</h2>
+      <ul id="queue" class="rows"></ul>
+      <p id="queue-empty" class="muted">Пусто. Нажмите «+» у трека в библиотеке.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Библиотека <span id="library-total" class="muted"></span></h2>
+      <input id="search" type="search" placeholder="Поиск по названию и исполнителю" autocomplete="off">
+      <ul id="library" class="rows"></ul>
+    </section>
+
+    <section class="panel chat-panel">
+      <h2>Чат</h2>
+      <div class="chat-wrap">
+        <ul id="chat" class="chat"></ul>
+        <button id="chat-new" type="button" class="chat-new" hidden>Новые сообщения</button>
+      </div>
+      <input id="chat-input" maxlength="500" placeholder="Сообщение…" autocomplete="off">
+    </section>
+  </div>
 
   <audio id="audio"></audio>
+
+  <div id="toast" class="toast" hidden></div>
 
   <details id="diag" open>
     <summary>диагностика</summary>

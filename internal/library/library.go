@@ -195,3 +195,26 @@ func (l *Library) List(ctx context.Context, q string, limit, offset int) ([]Trac
 }
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// MarkPlayed отмечает, что трек прозвучал в эфире.
+func (l *Library) MarkPlayed(ctx context.Context, id string, at int64) error {
+	_, err := l.db.ExecContext(ctx, `UPDATE tracks SET played_at = ? WHERE id = ?`, at, id)
+	return err
+}
+
+// Delete убирает трек из базы вместе с эфирным файлом и обложкой.
+func (l *Library) Delete(ctx context.Context, id string) error {
+	res, err := l.db.ExecContext(ctx, `DELETE FROM tracks WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	for _, p := range []string{l.AudioPath(id), l.CoverPath(id)} {
+		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
+}

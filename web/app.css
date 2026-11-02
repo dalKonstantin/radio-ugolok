@@ -1,13 +1,14 @@
-/* Минимальная вёрстка. Полное оформление — в M4. */
+/* Простая вёрстка. Полное оформление в стиле SoundCloud — в M4. */
 :root {
-  --orange:     #FF5500;
+  --orange:       #FF5500;
   --orange-hover: #FF7700;
-  --bg:         #F2F2F2;
-  --surface:    #FFFFFF;
-  --border:     #E5E5E5;
-  --text:       #333333;
-  --text-muted: #999999;
-  --radius:     3px;
+  --bg:           #F2F2F2;
+  --surface:      #FFFFFF;
+  --border:       #E5E5E5;
+  --row-hover:    #F2F2F2;
+  --text:         #333333;
+  --text-muted:   #999999;
+  --radius:       3px;
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -20,6 +21,8 @@ body {
   font: 14px/1.4 var(--font);
 }
 
+.muted { color: var(--text-muted); }
+
 header {
   display: flex;
   justify-content: space-between;
@@ -30,26 +33,63 @@ header {
   border-bottom: 1px solid var(--border);
 }
 .logo b { color: var(--orange); }
-#listeners { color: var(--text-muted); font-size: 12px; }
+#listeners { color: var(--text-muted); font-size: 12px; cursor: default; }
+header .button {
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  background: var(--orange);
+  color: #fff;
+  cursor: pointer;
+}
+header .button:hover { background: var(--orange-hover); }
 
-main {
-  max-width: 640px;
-  margin: 48px auto;
-  padding: 24px 16px;
+.upload-status {
+  min-height: 1.4em;
+  padding: 4px 16px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Колонки: от 1000 px очередь и библиотека рядом, от 1280 px справа чат. */
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  max-width: 1400px;
+  margin: 8px auto 48px;
+  padding: 0 16px;
+}
+@media (min-width: 1000px) {
+  .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .player, .chat-panel { grid-column: 1 / -1; }
+}
+@media (min-width: 1280px) {
+  .layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 320px; }
+  .player { grid-column: 1 / 3; }
+  .chat-panel { grid-column: 3; grid-row: 1 / span 2; }
+}
+
+.panel {
+  padding: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  min-width: 0;
 }
-.artist { color: var(--text-muted); font-size: 12px; }
+.panel h2 { margin: 0 0 12px; font-size: 16px; }
+.panel h2 .muted { font-size: 12px; font-weight: normal; }
+
+.artist { color: var(--text-muted); font-size: 12px; min-height: 1.4em; }
 .title { font-size: 24px; margin: 2px 0 8px; }
-.time { font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.meta { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+body.idle .title { color: var(--text-muted); }
 
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
-  margin-top: 24px;
+  margin-top: 20px;
 }
 button {
   padding: 8px 16px;
@@ -62,11 +102,92 @@ button {
 }
 button:hover { background: var(--orange-hover); }
 button.on { background: #333; }
+button.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+button.secondary.on { border-color: var(--orange); color: var(--orange); }
+button:disabled { opacity: 0.4; cursor: default; }
 input {
   padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   font: inherit;
+}
+#search, #chat-input { width: 100%; }
+#search { margin-bottom: 8px; }
+
+/* Строки очереди и библиотеки. */
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 4px;
+  border-top: 1px solid var(--border);
+}
+.rows li:hover { background: var(--row-hover); }
+.rows .num { width: 1.5em; text-align: right; }
+.rows .cover {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  background: var(--border);
+}
+.rows .track {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rows .icon {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.rows button.icon { visibility: hidden; }
+.rows li:hover button.icon { visibility: visible; }
+.rows button.icon:hover:not(:disabled) { color: var(--orange); }
+
+/* Чат. */
+.chat-panel { display: flex; flex-direction: column; }
+.chat-wrap { position: relative; flex: 1; min-height: 0; }
+.chat {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  height: 360px;
+  overflow-y: auto;
+}
+@media (min-width: 1280px) { .chat { height: calc(100vh - 220px); } }
+.chat li { display: flex; flex-wrap: wrap; gap: 0 6px; padding: 2px 0; font-size: 13px; }
+.chat .nick { width: 100%; color: var(--orange); font-size: 12px; font-weight: 600; margin-top: 6px; }
+.chat .text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.chat time { color: var(--text-muted); font-size: 11px; }
+.chat li.system .text { color: var(--text-muted); font-style: italic; }
+.chat-new {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.toast {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: #333;
+  color: #fff;
 }
 
 #diag {
@@ -89,58 +210,3 @@ input {
 }
 #diag dt, #diag dd { margin: 0; }
 #diag dd { text-align: right; color: var(--text); }
-
-.muted { color: var(--text-muted); }
-
-header .button {
-  padding: 6px 12px;
-  border-radius: var(--radius);
-  background: var(--orange);
-  color: #fff;
-  cursor: pointer;
-}
-header .button:hover { background: var(--orange-hover); }
-.upload-status {
-  max-width: 640px;
-  margin: 8px auto 0;
-  padding: 0 16px;
-  min-height: 1.4em;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.panel {
-  max-width: 640px;
-  margin: 0 auto 48px;
-  padding: 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-.panel h2 { margin: 0 0 12px; font-size: 16px; }
-.panel h2 .muted { font-size: 12px; font-weight: normal; }
-#search { width: 100%; margin-bottom: 8px; }
-
-.library { list-style: none; margin: 0; padding: 0; }
-.library li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 0;
-  border-top: 1px solid var(--border);
-}
-.library .cover {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  object-fit: cover;
-  background: var(--border);
-}
-.library .track {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.library a { color: var(--orange); font-size: 12px; }
