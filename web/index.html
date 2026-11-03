@@ -4,47 +4,85 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Radio Ugolok</title>
+  <link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/fonts/inter-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/app.css">
   <script type="module" src="/js/app.js"></script>
 </head>
-<body class="idle">
-  <header>
-    <span class="logo">Radio <b>Ugolok</b></span>
-    <span id="listeners">0 слушателей</span>
-    <label class="button">
-      Загрузить трек
-      <input id="file" type="file" accept="audio/*,.flac,.opus,.m4a,.wma,.aiff" multiple hidden>
-    </label>
-  </header>
-  <div id="upload-status" class="upload-status"></div>
+<body class="idle gated">
+  <!-- Гейт автозапуска: без клика браузер звук не даст. -->
+  <div id="gate" class="gate">
+    <div class="gate-logo">Radio <b>Ugolok</b></div>
+    <button id="gate-play" type="button" class="gate-play" aria-label="Подключиться к эфиру" autofocus>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+    </button>
+    <div id="gate-now" class="gate-now">Подключение…</div>
+    <div class="gate-hint">Нажмите, чтобы подключиться к эфиру</div>
+  </div>
+
+  <div class="top">
+    <header>
+      <span class="logo">Radio <b>Ugolok</b></span>
+      <span class="onair" id="onair">
+        <span class="dot"></span>
+        <span id="listeners">0 слушателей</span>
+      </span>
+      <span class="header-right">
+        <input id="nick" class="nick" maxlength="32" autocomplete="off" title="Ваш ник" aria-label="Ник">
+        <button id="chat-toggle" type="button" class="chat-toggle secondary">
+          Чат <span id="chat-badge" class="badge" hidden></span>
+        </button>
+        <label class="button upload-button">
+          Загрузить трек
+          <input id="file" type="file" accept="audio/*,.flac,.opus,.m4a,.wma,.aiff" multiple hidden>
+        </label>
+      </span>
+    </header>
+    <div id="upload-bar" class="upload-bar" hidden><div id="upload-fill"></div></div>
+  </div>
+
+  <section class="player">
+    <div class="player-inner">
+      <div class="cover-big">
+        <img id="cover" alt="" hidden>
+        <span id="cover-ph" class="cover-ph" aria-hidden="true">♪</span>
+      </div>
+      <div class="player-body">
+        <div id="artist" class="artist"></div>
+        <div id="title" class="title">Подключение…</div>
+        <canvas id="wave" class="wave" title="Эфир общий, перемотка недоступна"></canvas>
+        <div class="meta">
+          <span id="time"></span>
+          <span id="added-by"></span>
+        </div>
+        <div class="controls">
+          <button id="connect" type="button" class="ghost">Подключиться к эфиру</button>
+          <label class="volume" title="Громкость">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
+            <input id="volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Громкость">
+          </label>
+          <button id="skip" type="button" class="ghost" disabled>Скип</button>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <div class="layout">
-    <main class="panel player">
-      <div id="artist" class="artist"></div>
-      <div id="title" class="title">Подключение…</div>
-      <div class="meta"><span id="time"></span> <span id="added-by"></span></div>
-
-      <div class="controls">
-        <button id="connect" type="button">Подключиться к эфиру</button>
-        <button id="skip" type="button" class="secondary" disabled>Скип</button>
-        <label>Ник <input id="nick" maxlength="32" autocomplete="off"></label>
-      </div>
-    </main>
-
     <section class="panel">
       <h2>Очередь</h2>
       <ul id="queue" class="rows"></ul>
-      <p id="queue-empty" class="muted">Пусто. Нажмите «+» у трека в библиотеке.</p>
+      <p id="queue-empty" class="muted empty">Пусто. Нажмите «+» у трека в библиотеке.</p>
     </section>
 
     <section class="panel">
       <h2>Библиотека <span id="library-total" class="muted"></span></h2>
       <input id="search" type="search" placeholder="Поиск по названию и исполнителю" autocomplete="off">
       <ul id="library" class="rows"></ul>
+      <p id="library-empty" class="muted empty" hidden>Ничего не найдено. Перетащите файлы в окно, чтобы загрузить.</p>
     </section>
 
-    <section class="panel chat-panel">
-      <h2>Чат</h2>
+    <section id="chat-panel" class="panel chat-panel">
+      <h2>Чат <button id="chat-close" type="button" class="chat-close icon" aria-label="Свернуть чат">×</button></h2>
       <div class="chat-wrap">
         <ul id="chat" class="chat"></ul>
         <button id="chat-new" type="button" class="chat-new" hidden>Новые сообщения</button>
@@ -55,9 +93,10 @@
 
   <audio id="audio"></audio>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="drop" class="drop" hidden><span>Отпустите, чтобы загрузить</span></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
 
-  <details id="diag" open>
+  <details id="diag">
     <summary>диагностика</summary>
     <dl>
       <dt>ws</dt><dd id="d-socket">—</dd>

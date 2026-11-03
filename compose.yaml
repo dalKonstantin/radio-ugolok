@@ -1,0 +1,15 @@
+# Поднять: docker compose up -d --build (или make up). Данные — в ./data.
+services:
+  radio:
+    build: .
+    image: radio-ugolok
+    restart: unless-stopped
+    ports:
+      - "${RADIO_PORT:-8080}:8080"
+    volumes:
+      - ${RADIO_DATA_DIR:-./data}:/data
+    environment:
+      RADIO_MAX_UPLOAD: ${RADIO_MAX_UPLOAD:-150}
+      RADIO_BITRATE: ${RADIO_BITRATE:-192}
+      RADIO_QUEUE_LIMIT: ${RADIO_QUEUE_LIMIT:-3}
+      RADIO_EPHEMERAL: ${RADIO_EPHEMERAL:-false}

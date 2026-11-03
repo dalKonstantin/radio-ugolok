@@ -4,32 +4,33 @@ import { Socket } from './ws.js';
 import { ClockSync, RESYNC_EVERY_MS } from './sync.js';
 import { Player } from './player.js';
 import { uploadAll } from './upload.js';
+import { Waveform } from './waveform.js';
 import * as ui from './ui.js';
 
 const NICK_KEY = 'radio.nick';
+const VOLUME_KEY = 'radio.volume';
 const RESYNC_MIN_GAP_MS = 2000;
 const DIAG_EVERY_MS = 250;
 const SEARCH_DEBOUNCE_MS = 200;
 const LIBRARY_PAGE = 100;
 const CHAT_MAX = 500;
 
-const loadNick = () => {
+const load = (key) => {
   try {
-    return localStorage.getItem(NICK_KEY) || '';
+    return localStorage.getItem(key);
   } catch {
-    return '';
+    return null;
   }
 };
-const saveNick = (nick) => {
+const save = (key, value) => {
   try {
-    localStorage.setItem(NICK_KEY, nick);
+    localStorage.setItem(key, value);
   } catch {}
 };
 
 const nickInput = document.getElementById('nick');
-nickInput.value = loadNick() || `гость-${Math.floor(Math.random() * 9000 + 1000)}`;
-saveNick(nickInput.value);
-nickInput.addEventListener('change', () => saveNick(nickInput.value.trim()));
+nickInput.value = load(NICK_KEY) || `гость-${Math.floor(Math.random() * 9000 + 1000)}`;
+save(NICK_KEY, nickInput.value);
 
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const socket = new Socket(`${proto}//${location.host}/ws`);
@@ -45,6 +46,7 @@ const requestResync = () => {
 
 const audio = document.getElementById('audio');
 const player = new Player(audio, clock, { onStale: requestResync });
+const waveform = new Waveform(document.getElementById('wave'));
 
 // Состояние эфира, как его видит клиент.
 let nowPlaying = null;
@@ -56,6 +58,7 @@ const renderSkip = () => ui.renderSkip(skip, voted, !!nowPlaying?.track);
 
 function applyNowPlaying(np) {
   if (np.itemId !== nowPlaying?.itemId) voted = false;
+  if (np.track?.id !== nowPlaying?.track?.id) waveform.load(np.track?.id ?? null);
   nowPlaying = np;
   ui.renderNowPlaying(np);
   renderSkip();
@@ -126,30 +129,85 @@ searchInput.addEventListener('input', () => {
   searchTimer = setTimeout(loadLibrary, SEARCH_DEBOUNCE_MS);
 });
 
-// --- загрузка
-const fileInput = document.getElementById('file');
-fileInput.addEventListener('change', async () => {
-  const files = [...fileInput.files];
-  fileInput.value = '';
+// --- загрузка: кнопка в шапке и перетаскивание на всю страницу. Прогресс —
+// полоса под шапкой, итог — тостами.
+let uploading = Promise.resolve();
+function upload(files) {
   if (files.length === 0) return;
-  await uploadAll(files, nickInput.value.trim(), ({ file, index, total, progress, result }) => {
+  // Новая пачка ждёт, пока закончится предыдущая.
+  uploading = uploading.then(() => uploadAll(files, nickInput.value.trim(), (ev) => {
+    const { file, index, total, progress, result } = ev;
     if (!result) {
       const n = total > 1 ? ` (${index + 1}/${total})` : '';
-      ui.renderUploadStatus(progress < 1
-        ? `Загрузка${n}: ${file.name} — ${Math.round(progress * 100)}%`
-        : `Обработка${n}: ${file.name}…`);
-    } else if (result.ok) {
-      ui.renderUploadStatus(result.created
-        ? `Загружено: ${result.track.artist} — ${result.track.title}`
-        : `Уже в библиотеке: ${result.track.artist} — ${result.track.title}`);
+      if (progress < 1) {
+        ui.renderUploadProgress((index + progress) / total, `Загрузка${n}: ${file.name}`);
+      } else {
+        ui.renderUploadProgress('busy', `Обработка${n}: ${file.name}`);
+      }
+      return;
+    }
+    ui.renderUploadProgress(null);
+    if (result.ok) {
+      const name = `${result.track.artist} — ${result.track.title}`;
+      ui.toast(result.created ? `Загружено: ${name}` : `Уже в библиотеке: ${name}`);
     } else {
-      ui.renderUploadStatus('');
       ui.toast(`${file.name}: ${result.message}`);
     }
-  });
+  }));
+}
+
+const fileInput = document.getElementById('file');
+fileInput.addEventListener('change', () => {
+  const files = [...fileInput.files];
+  fileInput.value = '';
+  upload(files);
 });
 
-// --- чат
+const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+let dragDepth = 0; // dragenter/dragleave приходят от каждого вложенного элемента
+window.addEventListener('dragenter', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  ui.setDropActive(true);
+});
+window.addEventListener('dragover', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+});
+window.addEventListener('dragleave', (e) => {
+  if (!hasFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (dragDepth === 0) ui.setDropActive(false);
+});
+window.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  ui.setDropActive(false);
+  upload([...e.dataTransfer.files]);
+});
+
+// --- чат: от 1280 px колонка справа, уже — выезжающая панель.
+const wideChat = window.matchMedia('(min-width: 1280px)');
+const chatOpen = () => wideChat.matches || document.body.classList.contains('chat-open');
+ui.setChatVisibility(chatOpen);
+function toggleChat(open) {
+  document.body.classList.toggle('chat-open', open);
+  if (open) {
+    ui.clearUnread();
+    ui.scrollChat(true);
+    chatInput.focus();
+  }
+}
+document.getElementById('chat-toggle').addEventListener('click', () =>
+  toggleChat(!document.body.classList.contains('chat-open')));
+document.getElementById('chat-close').addEventListener('click', () => toggleChat(false));
+wideChat.addEventListener('change', () => {
+  if (wideChat.matches) ui.clearUnread();
+});
+
 const chatInput = document.getElementById('chat-input');
 chatInput.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.isComposing) return;
@@ -173,14 +231,46 @@ document.getElementById('skip').addEventListener('click', () => {
   }
 });
 
+function connect() {
+  player.unlock();
+  player.connect();
+  ui.renderConnectButton(true);
+}
+
 document.getElementById('connect').addEventListener('click', () => {
   if (player.connected) {
     player.disconnect();
+    ui.renderConnectButton(false);
   } else {
-    player.unlock();
-    player.connect();
+    connect();
   }
-  ui.renderConnectButton(player.connected);
+});
+
+// Гейт: первый клик даёт браузеру разрешение на звук и сразу выводит в эфир.
+document.getElementById('gate-play').addEventListener('click', () => {
+  ui.hideGate();
+  connect();
+});
+
+// Ник: смена уходит на сервер повторным join.
+nickInput.addEventListener('change', () => {
+  const nick = nickInput.value.trim();
+  if (!nick) return;
+  save(NICK_KEY, nick);
+  socket.send('join', { nick });
+});
+
+// Громкость: локальная, запоминается в браузере.
+const volumeInput = document.getElementById('volume');
+const setVolume = (v) => {
+  audio.volume = v;
+  ui.renderVolume(v);
+};
+const savedVolume = Number.parseFloat(load(VOLUME_KEY));
+setVolume(Number.isFinite(savedVolume) ? Math.min(1, Math.max(0, savedVolume)) : 1);
+volumeInput.addEventListener('input', () => {
+  setVolume(Number(volumeInput.value));
+  save(VOLUME_KEY, volumeInput.value);
 });
 
 setInterval(() => {
@@ -188,7 +278,12 @@ setInterval(() => {
 }, RESYNC_EVERY_MS);
 
 setInterval(() => {
-  ui.renderProgress(player.targetPos(), nowPlaying?.track?.durationMs);
+  const pos = player.targetPos();
+  const durMs = nowPlaying?.track?.durationMs;
+  ui.renderProgress(pos, durMs);
+  // Граница волны идёт по эфирному времени, а не по audio.currentTime:
+  // так она не дёргается при коррекции темпа.
+  waveform.setProgress(durMs && pos != null ? (pos * 1000) / durMs : 0);
   ui.renderDiag({
     socket: socket.status,
     offset: clock.ready ? clock.offset : null,
@@ -203,4 +298,4 @@ socket.connect();
 loadLibrary();
 
 // Для отладки из консоли: radio.audio.currentTime += 3
-window.radio = { socket, clock, player, audio };
+window.radio = { socket, clock, player, audio, waveform };

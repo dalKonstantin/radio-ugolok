@@ -44,8 +44,23 @@ export function renderNowPlaying(np) {
   const t = np?.track;
   document.body.classList.toggle('idle', !t);
   $('title').textContent = t ? t.title : 'Эфир пуст — поставьте трек в очередь';
+  $('title').title = t ? t.title : '';
   $('artist').textContent = t ? t.artist : '';
   $('added-by').textContent = t && np.addedBy ? `от ${np.addedBy}` : '';
+  $('gate-now').textContent = t ? `Сейчас в эфире: ${t.artist} — ${t.title}` : 'Эфир пока пуст';
+
+  const cover = $('cover');
+  const src = t?.hasCover ? `/api/tracks/${t.id}/cover` : '';
+  if (cover.getAttribute('src') !== src) {
+    if (src) cover.src = src;
+    else cover.removeAttribute('src');
+  }
+  cover.hidden = !src;
+  $('cover-ph').hidden = !!src;
+}
+
+export function hideGate() {
+  document.body.classList.remove('gated');
 }
 
 export function renderListeners({ count, nicks }) {
@@ -55,6 +70,9 @@ export function renderListeners({ count, nicks }) {
 
 export function renderConnectButton(connected) {
   $('connect').textContent = connected ? 'Отключиться' : 'Подключиться к эфиру';
+  $('connect').title = connected
+    ? 'Остановить звук у себя; эфир продолжится'
+    : 'Вернуться в текущую точку эфира';
   $('connect').classList.toggle('on', connected);
 }
 
@@ -81,17 +99,32 @@ export function renderDiag({ socket, offset, rtt, drift, rate }) {
   $('d-rate').textContent = rate.toFixed(3);
 }
 
-let toastTimer;
+const TOAST_MAX = 4;
 export function toast(text) {
-  const t = $('toast');
-  t.textContent = text;
-  t.hidden = false;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.hidden = true; }, TOAST_MS);
+  const box = $('toasts');
+  const t = el('div', 'toast', text);
+  box.append(t);
+  while (box.children.length > TOAST_MAX) box.firstElementChild.remove();
+  setTimeout(() => t.remove(), TOAST_MS);
 }
 
-export function renderUploadStatus(text) {
-  $('upload-status').textContent = text;
+// Полоса загрузки под шапкой: frac 0..1, 'busy' — сервер обрабатывает,
+// null — скрыть.
+export function renderUploadProgress(frac, label = '') {
+  const bar = $('upload-bar');
+  bar.hidden = frac == null;
+  bar.classList.toggle('busy', frac === 'busy');
+  bar.title = label;
+  if (typeof frac === 'number') $('upload-fill').style.width = `${Math.round(frac * 100)}%`;
+}
+
+export function setDropActive(on) {
+  $('drop').hidden = !on;
+}
+
+export function renderVolume(v) {
+  $('volume').value = v;
+  $('volume').style.setProperty('--fill', `${Math.round(v * 100)}%`);
 }
 
 // --- очередь и библиотека --------------------------------------------------
@@ -110,7 +143,7 @@ export function renderQueue(items, onRemove) {
     li.append(
       el('span', 'muted num', String(i + 1)),
       trackText(it.track),
-      el('span', 'muted', it.addedBy),
+      el('span', 'muted small', it.addedBy),
       button('icon', '×', 'Убрать из очереди', () => onRemove(it.itemId)),
     );
     return li;
@@ -121,13 +154,14 @@ export function renderQueue(items, onRemove) {
 // actions: {enqueue(trackId), remove(track)}; playingId — что сейчас в эфире.
 export function renderLibrary(items, total, playingId, actions) {
   $('library').replaceChildren(...items.map((t) => libraryRow(t, playingId, actions)));
+  $('library-empty').hidden = items.length > 0;
   $('library-total').textContent = items.length < total
     ? `показано ${items.length} из ${total}`
     : `${total} ${plural(total, 'трек', 'трека', 'треков')}`;
 }
 
 function libraryRow(t, playingId, actions) {
-  const li = el('li');
+  const li = el('li', t.id === playingId ? 'playing' : null);
 
   let cover;
   if (t.hasCover) {
@@ -142,7 +176,7 @@ function libraryRow(t, playingId, actions) {
   li.append(
     cover,
     trackText(t),
-    el('span', 'muted', fmtTime(t.durationMs / 1000)),
+    el('span', 'muted small', fmtTime(t.durationMs / 1000)),
     button('icon', '+', 'Поставить в очередь', () => actions.enqueue(t.id)),
   );
 
@@ -163,6 +197,18 @@ function libraryRow(t, playingId, actions) {
 // --- чат -------------------------------------------------------------------
 
 let lastChatNick = null;
+let unread = 0;
+let chatVisible = () => true;
+
+// isVisible() — виден ли сейчас чат; иначе новые сообщения копятся в счётчике.
+export function setChatVisibility(isVisible) {
+  chatVisible = isVisible;
+}
+
+export function clearUnread() {
+  unread = 0;
+  $('chat-badge').hidden = true;
+}
 
 export function resetChat(messages) {
   $('chat').replaceChildren();
@@ -185,6 +231,12 @@ export function appendChat(m) {
 
   if (stick) scrollChat(true);
   else $('chat-new').hidden = false;
+
+  if (m.kind === 'user' && !chatVisible()) {
+    unread++;
+    $('chat-badge').textContent = unread > 99 ? '99+' : String(unread);
+    $('chat-badge').hidden = false;
+  }
 }
 
 export function scrollChat(force) {
